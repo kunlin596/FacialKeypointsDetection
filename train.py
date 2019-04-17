@@ -32,7 +32,7 @@ def load_data(batch_size, data_transform, dataType='training'):
                                            root_dir='./data/' + dataType + '/',
                                            transform=data_transform)
 
-    print('Number of train images:', len(dataset))
+    print('Number of {} images: {}'.format(dataType, dataset))
 
     # load training data in batches
     loader = DataLoader(dataset,
@@ -52,7 +52,7 @@ def net_sample_output(net, test_loader):
         key_pts = sample['keypoints']
 
         # convert images to FloatTensors
-        images = gpu(images.type(torch.FloatTensor))
+        images = images.type(torch.FloatTensor)
         print('batch size', images.shape)
 
         # forward pass to get net output
@@ -115,7 +115,6 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
         total_batch_loss.append(batch_loss)
         epoch_loss.append(running_loss)
 
-    net.eval()
     print('Finished Training')
     return (total_batch_loss, epoch_loss)
 
@@ -133,10 +132,10 @@ def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=10):
         image = np.transpose(image, (1, 2, 0))   # transpose to go from torch to numpy image
 
         # un-transform the predicted key_pts data
-        predicted_key_pts = test_outputs[i].data
-        predicted_key_pts = predicted_key_pts.numpy()
+        p_key_pts = test_outputs[i].data
+        p_key_pts = p_key_pts.numpy()
         # undo normalization of keypoints
-        predicted_key_pts = (predicted_key_pts * 50.0 + 100)
+        p_key_pts = p_key_pts * 50.0 + 100
 
         # plot ground truth points for comparison, if they exist
         ground_truth_pts = None
@@ -145,9 +144,9 @@ def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=10):
             ground_truth_pts = ground_truth_pts * 50.0 + 100
 
         # call show_all_keypoints
-        show_all_keypoints(ax, np.squeeze(image), predicted_key_pts, ground_truth_pts)
+        show_all_keypoints(ax, np.squeeze(image), p_key_pts, ground_truth_pts)
 
-        # plt.axis('off')
+        plt.axis('off')
 
     plt.show()
 
@@ -167,8 +166,10 @@ def save_model(net):
     # after training, save your model parameters in the dir 'saved_models'
     torch.save(net.state_dict(), model_dir+model_name)
 
-def validate(net, images):
-    return net(cpu(images))
+def validate(net, loader):
+    images, predicted, gt = net_sample_output(net, loader)
+    predicted = predicted.view(predicted.size(0), 68, -1)
+    visualize_output(images, predicted, gt)
 
 def plot_batch_loss(batch_loss):
     for loss in batch_loss:
@@ -191,14 +192,6 @@ if __name__ == '__main__':
     (train_dataset, train_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='training')
     (test_dataset, test_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='test')
 
-    # returns: test images, test predicted keypoints, test ground truth keypoints
-    (test_images, test_outputs, gt_pts) = net_sample_output(net, test_loader)
-
-    # print out the dimensions of the data to see if they make sense
-    print('test data input size     :', test_images.data.size())
-    print('test data output size    :', test_outputs.data.size())
-    print('key points size          :', gt_pts.size())
-
     learning_rate = 1e-4
     criterion = gpu(nn.MSELoss())
 
@@ -211,8 +204,14 @@ if __name__ == '__main__':
     plot_batch_loss(total_batch_loss)
 
     net = cpu(net)
+
+    # returns: test images, test predicted keypoints, test ground truth keypoints
+    (test_images, test_outputs, gt_pts) = net_sample_output(net, test_loader)
+
+    # print out the dimensions of the data to see if they make sense
+    print('test data input size     :', test_images.data.size())
+    print('test data output size    :', test_outputs.data.size())
+    print('key points size          :', gt_pts.size())
+
     test_images = cpu(test_images)
     predicted_key_pts = validate(net, test_images)
-    predicted_key_pts = predicted_key_pts.view(predicted_key_pts.size(0), 68, 2)
-
-    visualize_output(test_images, predicted_key_pts, gt_pts)
