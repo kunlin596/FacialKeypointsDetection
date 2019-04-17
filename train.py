@@ -229,8 +229,11 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
+    n_epochs = 1 # start small, and increase when you've decided on your model structure and hyperparams
     train_net(n_epochs, train_loader, criterion, optimizer)
 
+    net.cpu()
     predicted_key_pts = validate(test_images)
+    predicted_key_pts = predicted_key_pts.view(predicted_key_pts.size(0), 68, 2)
+
     visualize_output(test_images, predicted_key_pts, gt_pts)
