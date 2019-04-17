@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -19,53 +19,30 @@ import torch.optim as optim
 
 from models import Net
 
-net = Net()
-print('Net:', net)
+def gpu(item):
+    return item.cuda() if torch.cuda.is_available() else item
 
-def load_train_data(data_transform):
+def cpu(item):
+    return item.cpu()
+
+def load_data(batch_size, data_transform, dataType='training'):
     # create the transformed dataset
-    train_dataset = FacialKeypointsDataset(csv_file='./data/training_frames_keypoints.csv',
-                                           root_dir='./data/training/',
+    dataset = FacialKeypointsDataset(csv_file='./data/' + dataType + '_frames_keypoints.csv',
+                                           root_dir='./data/' + dataType + '/',
                                            transform=data_transform)
 
-
-    print('Number of train images:', len(train_dataset))
-
-    # iterate through the transformed dataset and print some stats about the first few samples
-    # for i in range(4):
-    #     sample = train_dataset[i]
-    #     print('test sample image: ', i, 'image size:', sample['image'].size(), 'key points size:', sample['keypoints'].size())
+    print('Number of train images:', len(dataset))
 
     # load training data in batches
-    batch_size = 10
-    train_loader = DataLoader(train_dataset,
-                              batch_size=batch_size,
-                              shuffle=True,
-                              num_workers=4)
+    loader = DataLoader(dataset,
+                        batch_size=batch_size,
+                        shuffle=True,
+                        num_workers=4)
 
-    return (train_dataset, train_loader)
-
-
-def load_test_data(data_transform):
-    # create the test dataset
-    test_dataset = FacialKeypointsDataset(csv_file='./data/test_frames_keypoints.csv',
-                                          root_dir='./data/test/',
-                                          transform=data_transform)
-
-    print('Number of test images:', len(test_dataset))
-
-    # load test data in batches
-    batch_size = 10
-
-    test_loader = DataLoader(test_dataset,
-                             batch_size=batch_size,
-                             shuffle=True,
-                             num_workers=4)
-
-    return (test_dataset, test_loader)
+    return (dataset, loader)
 
 # test the model on a batch of test images
-def net_sample_output(test_loader):
+def net_sample_output(net, test_loader):
     # iterate through the test dataset
     for i, sample in enumerate(test_loader):
 
@@ -74,7 +51,7 @@ def net_sample_output(test_loader):
         key_pts = sample['keypoints']
 
         # convert images to FloatTensors
-        images = images.type(torch.FloatTensor)
+        images = gpu(images.type(torch.FloatTensor))
         print('batch size', images.shape)
 
         # forward pass to get net output
@@ -87,8 +64,7 @@ def net_sample_output(test_loader):
         if i == 0:
             return images, output_pts, key_pts
 
-def train_net(n_epochs, loader, criterion, optimizer):
-    net.to('cuda')
+def train_net(net, n_epochs, loader, criterion, optimizer):
     net.train()
 
     for epoch in range(n_epochs):  # loop over the dataset multiple times
@@ -105,12 +81,8 @@ def train_net(n_epochs, loader, criterion, optimizer):
             key_pts = key_pts.view(key_pts.size(0), -1)
 
             # convert variables to floats for regression loss
-            key_pts = key_pts.type(torch.cuda.FloatTensor)
-            images = images.type(torch.cuda.FloatTensor)
-
-            images = images.to('cuda')
-            key_pts = key_pts.to('cuda')
-            #  print(key_pts)
+            key_pts = gpu(key_pts.type(torch.FloatTensor))
+            images = gpu(images.type(torch.FloatTensor))
 
             # forward pass to get outputs
             output_pts = net(images)
@@ -180,25 +152,23 @@ def show_all_keypoints(ax, image, predicted_key_pts, gt_pts=None):
     if gt_pts is not None:
         ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=10, marker='.', c='g')
 
-def save_model(name):
+def save_model(net):
     ## TODO: change the name to something uniqe for each new model
+    import time
     model_dir = 'saved_models/'
-    model_name = 'keypoints_model_{}.pt'.format(name)
+    model_name = 'keypoints_model_{}.pt'.format(time.time())
 
     # after training, save your model parameters in the dir 'saved_models'
     torch.save(net.state_dict(), model_dir+model_name)
 
-def validate(images):
-    return net(images)
-    
+def validate(net, images):
+    return net(cpu(images))
 
 if __name__ == '__main__':
+    torch.cuda.empty_cache()
 
-    ## TODO: define the data_transform using transforms.Compose([all tx's, . , .])
-    # order matters! i.e. rescaling should come before a smaller crop
-    #
-    # the default transforms operate upon the np.arrays, we need a custom transform object to handle dict.
-    # see data_load.py for more details.
+    net = gpu(Net())
+    print('Defined net:', net)
 
     data_transform = transforms.Compose([
         Rescale(250),
@@ -207,33 +177,30 @@ if __name__ == '__main__':
         ToTensor(),
     ])
 
-    # testing that you've defined a transform
-    assert(data_transform is not None), 'Define a data_transform'
-
-    (train_dataset, train_loader) = load_train_data(data_transform)
-    (test_dataset, test_loader) = load_test_data(data_transform)
-
+    (train_dataset, train_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='training')
+    (test_dataset, test_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='test')
 
     # returns: test images, test predicted keypoints, test ground truth keypoints
-    test_images, test_outputs, gt_pts = net_sample_output(test_loader)
+    (test_images, test_outputs, gt_pts) = net_sample_output(net, test_loader)
 
     # print out the dimensions of the data to see if they make sense
-    print('test data input size', test_images.data.size())
-    print('test data output size', test_outputs.data.size())
-    print('key points size', gt_pts.size())
+    print('test data input size     :', test_images.data.size())
+    print('test data output size    :', test_outputs.data.size())
+    print('key points size          :', gt_pts.size())
 
     learning_rate = 1e-4
-    criterion = nn.MSELoss().cuda()
+    criterion = gpu(nn.MSELoss())
 
     # optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 1 # start small, and increase when you've decided on your model structure and hyperparams
-    train_net(n_epochs, train_loader, criterion, optimizer)
+    n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
+    train_net(net, n_epochs, train_loader, criterion, optimizer)
 
-    net.cpu()
-    predicted_key_pts = validate(test_images)
+    net = cpu(net)
+    test_images = cpu(test_images)
+    predicted_key_pts = validate(net, test_images)
     predicted_key_pts = predicted_key_pts.view(predicted_key_pts.size(0), 68, 2)
 
     visualize_output(test_images, predicted_key_pts, gt_pts)
