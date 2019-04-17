@@ -168,7 +168,6 @@ def save_model(net):
 
 def validate(net, loader):
     images, predicted, gt = net_sample_output(net, loader)
-    predicted = predicted.view(predicted.size(0), 68, -1)
     visualize_output(images, predicted, gt)
 
 def plot_batch_loss(batch_loss):
