@@ -67,6 +67,8 @@ def net_sample_output(net, test_loader):
 def train_net(net, n_epochs, loader, criterion, optimizer):
     net.train()
 
+    batch_loss = []
+    epoch_loss = []
     for epoch in range(n_epochs):  # loop over the dataset multiple times
 
         running_loss = 0.0
@@ -104,12 +106,15 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
 
             # print loss statistics
             running_loss += loss.item()
+            batch_loss.append(loss.item())
             if batch_i % 10 == 9:    # print every 10 batches
                 print('Epoch: {}, Batch: {}, Avg. Loss: {}'.format(epoch + 1, batch_i + 1, running_loss / 1000))
                 running_loss = 0.0
+        epoch_loss.append(running_loss)
 
     net.eval()
     print('Finished Training')
+    return (batch_loss, epoch_loss)
 
 
 def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=10):
@@ -195,8 +200,8 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
-    train_net(net, n_epochs, train_loader, criterion, optimizer)
+    n_epochs = 1 # start small, and increase when you've decided on your model structure and hyperparams
+    batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
 
     net = cpu(net)
     test_images = cpu(test_images)
