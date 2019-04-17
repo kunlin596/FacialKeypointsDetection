@@ -105,8 +105,8 @@ def train_net(n_epochs, loader, criterion, optimizer):
             key_pts = key_pts.view(key_pts.size(0), -1)
 
             # convert variables to floats for regression loss
-            key_pts = key_pts.type(torch.FloatTensor)
-            images = images.type(torch.FloatTensor)
+            key_pts = key_pts.type(torch.cuda.FloatTensor)
+            images = images.type(torch.cuda.FloatTensor)
 
             images = images.to('cuda')
             key_pts = key_pts.to('cuda')
@@ -188,6 +188,9 @@ def save_model(name):
     # after training, save your model parameters in the dir 'saved_models'
     torch.save(net.state_dict(), model_dir+model_name)
 
+def validate(images):
+    return net(images)
+    
 
 if __name__ == '__main__':
 
@@ -219,13 +222,15 @@ if __name__ == '__main__':
     print('test data output size', test_outputs.data.size())
     print('key points size', gt_pts.size())
 
-    criterion = nn.MSELoss()
+    learning_rate = 1e-4
+    criterion = nn.MSELoss().cuda()
 
     # optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    optimizer = optim.Adam(params=net.parameters(), lr=0.001)
+    optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
     n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
     train_net(n_epochs, train_loader, criterion, optimizer)
 
-    visualize_output(test_images, test_outputs, gt_pts)
+    predicted_key_pts = validate(test_images)
+    visualize_output(test_images, predicted_key_pts, gt_pts)
