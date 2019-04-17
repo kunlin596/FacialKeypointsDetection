@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 # watch for any changes in model.py, if it changes, re-load it automatically
 #  %load_ext autoreload
@@ -67,11 +68,12 @@ def net_sample_output(net, test_loader):
 def train_net(net, n_epochs, loader, criterion, optimizer):
     net.train()
 
-    batch_loss = []
+    total_batch_loss = []
     epoch_loss = []
     for epoch in range(n_epochs):  # loop over the dataset multiple times
 
         running_loss = 0.0
+        batch_loss = []
 
         # train on batches of data, assumes you already have loader
         for batch_i, data in enumerate(loader):
@@ -110,11 +112,12 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
             if batch_i % 10 == 9:    # print every 10 batches
                 print('Epoch: {}, Batch: {}, Avg. Loss: {}'.format(epoch + 1, batch_i + 1, running_loss / 1000))
                 running_loss = 0.0
+        total_batch_loss.append(batch_loss)
         epoch_loss.append(running_loss)
 
     net.eval()
     print('Finished Training')
-    return (batch_loss, epoch_loss)
+    return (total_batch_loss, epoch_loss)
 
 
 def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=10):
@@ -158,8 +161,6 @@ def show_all_keypoints(ax, image, predicted_key_pts, gt_pts=None):
         ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=10, marker='.', c='g')
 
 def save_model(net):
-    ## TODO: change the name to something uniqe for each new model
-    import time
     model_dir = 'saved_models/'
     model_name = 'keypoints_model_{}.pt'.format(time.time())
 
@@ -168,6 +169,11 @@ def save_model(net):
 
 def validate(net, images):
     return net(cpu(images))
+
+def plot_batch_loss(batch_loss):
+    for loss in batch_loss:
+        plt.plot(loss)
+    plt.show()
 
 if __name__ == '__main__':
     torch.cuda.empty_cache()
@@ -200,8 +206,9 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 1 # start small, and increase when you've decided on your model structure and hyperparams
-    batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
+    n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
+    total_batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
+    plot_batch_loss(total_batch_loss)
 
     net = cpu(net)
     test_images = cpu(test_images)
