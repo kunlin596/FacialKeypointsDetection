@@ -39,6 +39,8 @@ class Trainer(object):
             Normalize(),
             ToTensor(),
         ])
+        self.total_batch_loss = []
+        self.epoch_loss = []
 
     def gpu(self, item):
         if self.useGpu and torch.cuda.is_available():
@@ -202,13 +204,17 @@ class Trainer(object):
 
     def validate(self):
         self.net.eval()
-        images, predicted, gt = self.net_sample_output(self.net, self.test_loader)
+        images, predicted, gt = self.net_sample_output()
         predicted = predicted.view(predicted.size(0), 68, -1)
         self.visualize_output(images, predicted, gt)
 
-    def plot_batch_loss(batch_loss):
-        for loss in batch_loss:
+    def plot_batch_loss(self):
+        for loss in self.total_batch_loss:
             plt.plot(loss)
+        plt.show()
+
+    def plot_epoch_loss(self):
+        plt.plot(self.epoch_loss)
         plt.show()
 
     def train(self):
@@ -219,10 +225,12 @@ class Trainer(object):
         self.reload_all_data()
 
         # train your network
-        total_batch_loss, epoch_loss = self.train_net()
-        self.plot_batch_loss(total_batch_loss)
+        self.total_batch_loss, self.epoch_loss = self.train_net()
+        self.plot_batch_loss()
+        self.plot_epoch_loss()
+
         # returns: test images, test predicted keypoints, test ground truth keypoints
-        (test_images, test_outputs, gt_pts) = self.net_sample_output(self.net, self.test_loader)
+        (test_images, test_outputs, gt_pts) = self.net_sample_output()
 
         # print out the dimensions of the data to see if they make sense
         print('test data input size     :', test_images.data.size())
