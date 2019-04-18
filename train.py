@@ -78,6 +78,7 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
         epoch_start = time.time()
 
         # train on batches of data, assumes you already have loader
+        print('-------------------------------')
         for batch_i, data in enumerate(loader):
             # get the input images and their corresponding labels
             images = data['image']
@@ -111,9 +112,8 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
             # print loss statistics
             running_loss += loss.item()
             batch_loss.append(loss.item())
-            if batch_i % 10 == 9:    # print every 10 batches
-                elapsed_time = time.time() - epoch_start
-                print('Epoch: {0:2}, Batch: {1:4}, Avg. Loss: {2:.8f}, Time: {3:8.4f} s'.format(epoch + 1, batch_i + 1, running_loss / 1000, elapsed_time))
+            elapsed_time = time.time() - epoch_start
+            print('Epoch: {0:2}, Batch: {1:4}, Avg. Loss: {2:.8f}, Time: {3:12.4f} s'.format(epoch + 1, batch_i + 1, loss.item() / 1000, elapsed_time))
         total_batch_loss.append(batch_loss)
         epoch_loss.append(running_loss)
 
@@ -121,17 +121,17 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
     return (total_batch_loss, epoch_loss)
 
 
-def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=10):
+def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=100):
     plt.figure(figsize=(40,30))
 
     net.to('cpu')
     for i in range(batch_size):
-        ax = plt.subplot(1, batch_size, i + 1)
+        ax = plt.subplot(batch_size / 10, 10, i + 1)
 
         # un-transform the image data
         image = test_images[i].data   # get the image from it's Variable wrapper
         image = image.numpy()   # convert to numpy array from a Tensor
-        image = np.transpose(image, (1, 2, 0))   # transpose to go from torch to numpy image
+        # image = np.transpose(image, (1, 2, 0))   # transpose to go from torch to numpy image
 
         # un-transform the predicted key_pts data
         p_key_pts = test_outputs[i].data
@@ -156,10 +156,10 @@ def show_all_keypoints(ax, image, predicted_key_pts, gt_pts=None):
     """Show image with predicted keypoints"""
     # image is grayscale
     ax.imshow(image, cmap='gray')
-    ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=10, marker='.', c='m')
+    ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=5, marker='.', c='m')
     # plot ground truth points as green pts
     if gt_pts is not None:
-        ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=10, marker='.', c='g')
+        ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=5, marker='.', c='g')
 
 def save_model(net):
     model_dir = 'saved_models/'
@@ -190,8 +190,8 @@ if __name__ == '__main__':
         ToTensor(),
     ])
 
-    (train_dataset, train_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='training')
-    (test_dataset, test_loader) = load_data(batch_size=10, data_transform=data_transform, dataType='test')
+    (train_dataset, train_loader) = load_data(batch_size=100, data_transform=data_transform, dataType='training')
+    (test_dataset, test_loader) = load_data(batch_size=100, data_transform=data_transform, dataType='test')
 
     learning_rate = 1e-4
     criterion = gpu(nn.MSELoss())
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 10 # start small, and increase when you've decided on your model structure and hyperparams
+    n_epochs = 100 # start small, and increase when you've decided on your model structure and hyperparams
     total_batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
     plot_batch_loss(total_batch_loss)
 
