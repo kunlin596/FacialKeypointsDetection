@@ -75,6 +75,8 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
         running_loss = 0.0
         batch_loss = []
 
+        epoch_start = time.time()
+
         # train on batches of data, assumes you already have loader
         for batch_i, data in enumerate(loader):
             # get the input images and their corresponding labels
@@ -110,8 +112,8 @@ def train_net(net, n_epochs, loader, criterion, optimizer):
             running_loss += loss.item()
             batch_loss.append(loss.item())
             if batch_i % 10 == 9:    # print every 10 batches
-                print('Epoch: {}, Batch: {}, Avg. Loss: {}'.format(epoch + 1, batch_i + 1, running_loss / 1000))
-                running_loss = 0.0
+                elapsed_time = time.time() - epoch_start
+                print('Epoch: {0:2}, Batch: {1:4}, Avg. Loss: {2:.8f}, Time: {3:8.4f} s'.format(epoch + 1, batch_i + 1, running_loss / 1000, elapsed_time))
         total_batch_loss.append(batch_loss)
         epoch_loss.append(running_loss)
 
