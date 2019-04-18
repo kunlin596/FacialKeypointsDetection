@@ -105,6 +105,7 @@ class Trainer(object):
 
             running_loss = 0.0
             batch_loss = []
+            epoch_start_time = time.time()
 
             # train on batches of data, assumes you already have loader
             for batch_i, data in enumerate(self.train_loader):
@@ -141,7 +142,7 @@ class Trainer(object):
                 running_loss += loss.item()
                 batch_loss.append(loss.item())
 
-                print('Epoch: {0:3}, Batch: {1:4}, Avg. Loss: {2:12.6f}'.format(epoch + 1, batch_i + 1, running_loss / self.batch_size))
+                print('Epoch: {0:3}, Batch: {1:4}, Batch Loss: {2:12.6f}, Elapsed Time: {3:15.4f} s'.format(epoch + 1, batch_i + 1, running_loss / self.batch_size, time.time() - epoch_start_time))
                 running_loss = 0.0
 
             total_batch_loss.append(batch_loss)
@@ -211,7 +212,7 @@ class Trainer(object):
         plt.show()
 
     def train(self):
-        print('Statr training ...')
+        print('Start training ...')
         print('Number of epochs {}, batch size {}'.format(self.n_epochs, self.batch_size))
         torch.cuda.empty_cache()
 
