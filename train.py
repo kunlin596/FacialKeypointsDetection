@@ -73,7 +73,7 @@ class Trainer(object):
     def net_sample_output(self):
         # iterate through the test dataset
         assert(self.test_loader is not None)
-        self.net = self.net.cpu()
+        self.net.to('cpu')
         for i, sample in enumerate(self.test_loader):
 
             # get sample data: images and ground truth keypoints
@@ -144,8 +144,7 @@ class Trainer(object):
                 # print loss statistics
                 running_loss += loss.item()
                 batch_loss.append(loss.item())
-
-                print('Epoch: {0:3}, Batch: {1:4}, Batch Loss: {2:12.6f}, Elapsed Time: {3:15.4f} s'.format(epoch + 1, batch_i + 1, running_loss / self.batch_size, time.time() - epoch_start_time))
+                print('Epoch: {0:3}, Batch: {1:4}, Batch Loss: {2:12.6f}, Elapsed Time: {3:15.4f} s'.format(epoch + 1, batch_i + 1, loss.item(), time.time() - epoch_start_time))
 
             total_batch_loss.append(batch_loss)
             epoch_loss.append(running_loss)
@@ -190,10 +189,10 @@ class Trainer(object):
         """Show image with predicted keypoints"""
         # image is grayscale
         ax.imshow(image, cmap='gray')
-        ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=5, marker='.', c='m')
+        ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=1, marker='.', c='m')
         # plot ground truth points as green pts
         if gt_pts is not None:
-            ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=5, marker='.', c='g')
+            ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=1, marker='.', c='g')
 
     def save_model(self):
         model_dir = 'saved_models/'
@@ -203,7 +202,7 @@ class Trainer(object):
         torch.save(self.net.state_dict(), model_dir+model_name)
 
     def validate(self):
-        self.net.cpu()
+        self.net.to('cpu')
         self.net.eval()
         images, predicted, gt = self.net_sample_output()
         predicted = predicted.view(predicted.size(0), 68, -1)
@@ -229,17 +228,7 @@ class Trainer(object):
         self.total_batch_loss, self.epoch_loss = self.train_net()
         self.plot_batch_loss()
         self.plot_epoch_loss()
-
-        # returns: test images, test predicted keypoints, test ground truth keypoints
-        (test_images, test_outputs, gt_pts) = self.net_sample_output()
-
-        # print out the dimensions of the data to see if they make sense
-        print('test data input size     :', test_images.data.size())
-        print('test data output size    :', test_outputs.data.size())
-        print('key points size          :', gt_pts.size())
-
-        test_images = test_images.cpu()
-        predicted_key_pts = self.validate()
+        self.validate()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = 'CNN training')
