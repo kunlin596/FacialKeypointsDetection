@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import argparse
+
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -177,7 +179,7 @@ def plot_batch_loss(batch_loss):
         plt.plot(loss)
     plt.show()
 
-if __name__ == '__main__':
+def main(batch_size=10, n_epochs=1):
     torch.cuda.empty_cache()
 
     net = gpu(Net())
@@ -190,8 +192,8 @@ if __name__ == '__main__':
         ToTensor(),
     ])
 
-    (train_dataset, train_loader) = load_data(batch_size=100, data_transform=data_transform, dataType='training')
-    (test_dataset, test_loader) = load_data(batch_size=100, data_transform=data_transform, dataType='test')
+    (train_dataset, train_loader) = load_data(batch_size=batch_size, data_transform=data_transform, dataType='training')
+    (test_dataset, test_loader) = load_data(batch_size=batch_size, data_transform=data_transform, dataType='test')
 
     learning_rate = 1e-4
     criterion = gpu(nn.MSELoss())
@@ -200,7 +202,6 @@ if __name__ == '__main__':
     optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
 
     # train your network
-    n_epochs = 100 # start small, and increase when you've decided on your model structure and hyperparams
     total_batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
     plot_batch_loss(total_batch_loss)
 
@@ -216,3 +217,12 @@ if __name__ == '__main__':
 
     test_images = cpu(test_images)
     predicted_key_pts = validate(net, test_images)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description = 'CNN training')
+    parser.add_argument('--batch_size', action='store', type=int, dest='batch_size', default=10, help='batch size')
+    parser.add_argument('--n_epochs', action='store', type=int, dest='n_epochs', default=10, help='number of epochs')
+    args = parser.parse_args()
+
+    main(batch_size=args.batch_size, n_epochs=args.n_epochs)
+
