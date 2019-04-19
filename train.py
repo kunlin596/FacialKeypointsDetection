@@ -22,207 +22,222 @@ import torch.optim as optim
 
 from models import Net
 
-def gpu(item):
-    return item.cuda() if torch.cuda.is_available() else item
+class Trainer(object):
 
-def cpu(item):
-    return item.cpu()
+    def __init__(self, batch_size=10, n_epochs=1, learning_rate=1e-4, useGpu=True):
+        self.batch_size = batch_size
+        self.n_epochs = n_epochs
+        self.useGpu = useGpu
+        self.net = self.gpu(Net())
+        self.criterion = self.gpu(nn.MSELoss())
+        self.learning_rate = 1e-4
+        # optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = optim.Adam(params=self.net.parameters(), lr=self.learning_rate)
+        self.data_transform = transforms.Compose([
+            Rescale(250),
+            RandomCrop(224),
+            Normalize(),
+            ToTensor(),
+        ])
 
-def load_data(batch_size, data_transform, dataType='training'):
-    # create the transformed dataset
-    dataset = FacialKeypointsDataset(csv_file='./data/' + dataType + '_frames_keypoints.csv',
-                                           root_dir='./data/' + dataType + '/',
-                                           transform=data_transform)
+    def gpu(self, item):
+        if self.useGpu and torch.cuda.is_available():
+            return item.cuda()
+        else:
+            return item
 
-    print('Number of {} images: {}'.format(dataType, dataset))
+    def load_data(self, dataType='training'):
+        # create the transformed dataset
+        assert(self.data_transform is not None)
+        dataset = FacialKeypointsDataset(csv_file='./data/' + dataType + '_frames_keypoints.csv',
+                                         root_dir='./data/' + dataType + '/',
+                                         transform=self.data_transform)
 
-    # load training data in batches
-    loader = DataLoader(dataset,
-                        batch_size=batch_size,
-                        shuffle=True,
-                        num_workers=4)
+        print('Number of {0:10} images: {1:6}'.format(dataType, len(dataset)))
 
-    return (dataset, loader)
+        # load training data in batches
+        loader = DataLoader(dataset,
+                            batch_size=self.batch_size,
+                            shuffle=True,
+                            num_workers=4)
 
-# test the model on a batch of test images
-def net_sample_output(net, test_loader):
-    # iterate through the test dataset
-    for i, sample in enumerate(test_loader):
+        return (dataset, loader)
 
-        # get sample data: images and ground truth keypoints
-        images = sample['image']
-        key_pts = sample['keypoints']
+    def reload_all_data(self):
+        self.train_dataset, self.train_loader = self.load_data(dataType='training')
+        self.test_dataset, self.test_loader = self.load_data(dataType='test')
 
-        # convert images to FloatTensors
-        images = images.type(torch.FloatTensor)
-        print('batch size', images.shape)
+    # test the model on a batch of test images
+    def net_sample_output(self):
+        # iterate through the test dataset
+        assert(self.test_loader is not None)
+        for i, sample in enumerate(self.test_loader):
 
-        # forward pass to get net output
-        output_pts = net(images)
+            # get sample data: images and ground truth keypoints
+            images = sample['image']
+            key_pts = sample['keypoints']
 
-        # reshape to batch_size x 68 x 2 pts
-        output_pts = output_pts.view(output_pts.size()[0], 68, -1)
+            # convert images to FloatTensors
+            images = images.type(torch.FloatTensor)
+            print('batch size', images.shape)
 
-        # break after first image is tested
-        if i == 0:
-            return images, output_pts, key_pts
+            # forward pass to get net output
+            output_pts = self.net(images)
 
-def train_net(net, n_epochs, loader, criterion, optimizer):
-    net.train()
+            # reshape to batch_size x 68 x 2 pts
+            output_pts = output_pts.view(output_pts.size()[0], 68, -1)
 
-    total_batch_loss = []
-    epoch_loss = []
-    for epoch in range(n_epochs):  # loop over the dataset multiple times
+            # break after first image is tested
+            if i == 0:
+                return images, output_pts, key_pts
 
-        running_loss = 0.0
-        batch_loss = []
+    def train_net(self):
+        assert(self.net is not None)
+        assert(self.train_loader is not None)
+        assert(self.criterion is not None)
+        assert(self.optimizer is not None)
 
-        epoch_start = time.time()
+        self.net.train()
 
-        # train on batches of data, assumes you already have loader
-        print('-------------------------------')
-        for batch_i, data in enumerate(loader):
-            # get the input images and their corresponding labels
-            images = data['image']
-            key_pts = data['keypoints']
+        total_batch_loss = []
+        epoch_loss = []
+        for epoch in range(self.n_epochs):  # loop over the dataset multiple times
 
-            # flatten pts
-            key_pts = key_pts.view(key_pts.size(0), -1)
+            running_loss = 0.0
+            batch_loss = []
 
-            # convert variables to floats for regression loss
-            key_pts = gpu(key_pts.type(torch.FloatTensor))
-            images = gpu(images.type(torch.FloatTensor))
+            # train on batches of data, assumes you already have loader
+            for batch_i, data in enumerate(self.train_loader):
+                # get the input images and their corresponding labels
+                images = data['image']
+                key_pts = data['keypoints']
 
-            # forward pass to get outputs
-            output_pts = net(images)
+                # flatten pts
+                key_pts = key_pts.view(key_pts.size(0), -1)
 
-            # calculate the loss between predicted and target keypoints
-            # print(output_pts, key_pts)
-            loss = criterion(output_pts, key_pts)
-            #  print(output_pts)
-            #  print(key_pts)
+                # convert variables to floats for regression loss
+                key_pts = self.gpu(key_pts.type(torch.FloatTensor))
+                images = self.gpu(images.type(torch.FloatTensor))
 
-            # zero the parameter (weight) gradients
-            optimizer.zero_grad()
+                # forward pass to get outputs
+                output_pts = self.net(images)
 
-            # backward pass to calculate the weight gradients
-            loss.backward()
+                # calculate the loss between predicted and target keypoints
+                # print(output_pts, key_pts)
+                loss = self.criterion(output_pts, key_pts)
+                #  print(output_pts)
+                #  print(key_pts)
 
-            # update the weights
-            optimizer.step()
+                # zero the parameter (weight) gradients
+                self.optimizer.zero_grad()
 
-            # print loss statistics
-            running_loss += loss.item()
-            batch_loss.append(loss.item())
-            elapsed_time = time.time() - epoch_start
-            print('Epoch: {0:2}, Batch: {1:4}, Avg. Loss: {2:.8f}, Time: {3:12.4f} s'.format(epoch + 1, batch_i + 1, loss.item() / 1000, elapsed_time))
-        total_batch_loss.append(batch_loss)
-        epoch_loss.append(running_loss)
+                # backward pass to calculate the weight gradients
+                loss.backward()
 
-    print('Finished Training')
-    return (total_batch_loss, epoch_loss)
+                # update the weights
+                self.optimizer.step()
+
+                # print loss statistics
+                running_loss += loss.item()
+                batch_loss.append(loss.item())
+
+                print('Epoch: {0:3}, Batch: {1:4}, Avg. Loss: {2:12.6f}'.format(epoch + 1, batch_i + 1, running_loss / self.batch_size))
+                running_loss = 0.0
+
+            total_batch_loss.append(batch_loss)
+            epoch_loss.append(running_loss)
+
+        print('Finished Training')
+        return (total_batch_loss, epoch_loss)
 
 
-def visualize_output(test_images, test_outputs, gt_pts=None, batch_size=100):
-    plt.figure(figsize=(40,30))
+    def visualize_output(self, test_images, test_outputs, gt_pts=None):
+        plt.figure(figsize=(40,30))
 
-    net.to('cpu')
-    for i in range(batch_size):
-        ax = plt.subplot(batch_size / 10, 10, i + 1)
+        self.net.to('cpu')
+        self.net.eval()
+        for i in range(self.batch_size):
+            ax = plt.subplot(self.batch_size / 10, 10, i + 1)
 
-        # un-transform the image data
-        image = test_images[i].data   # get the image from it's Variable wrapper
-        image = image.numpy()   # convert to numpy array from a Tensor
-        # image = np.transpose(image, (1, 2, 0))   # transpose to go from torch to numpy image
+            # un-transform the image data
+            image = test_images[i].data   # get the image from it's Variable wrapper
+            image = image.numpy()   # convert to numpy array from a Tensor
+            image = np.transpose(image, (1, 2, 0))   # transpose to go from torch to numpy image
 
-        # un-transform the predicted key_pts data
-        p_key_pts = test_outputs[i].data
-        p_key_pts = p_key_pts.numpy()
-        # undo normalization of keypoints
-        p_key_pts = p_key_pts * 50.0 + 100
+            # un-transform the predicted key_pts data
+            p_key_pts = test_outputs[i].data
+            p_key_pts = p_key_pts.numpy()
+            # undo normalization of keypoints
+            p_key_pts = p_key_pts * 50.0 + 100
 
-        # plot ground truth points for comparison, if they exist
-        ground_truth_pts = None
+            # plot ground truth points for comparison, if they exist
+            ground_truth_pts = None
+            if gt_pts is not None:
+                ground_truth_pts = gt_pts[i]
+                ground_truth_pts = ground_truth_pts * 50.0 + 100
+
+            # call show_all_keypoints
+            self.show_all_keypoints(ax, np.squeeze(image), p_key_pts, ground_truth_pts)
+
+            plt.axis('off')
+
+        plt.show()
+
+    def show_all_keypoints(self, ax, image, predicted_key_pts, gt_pts=None):
+        """Show image with predicted keypoints"""
+        # image is grayscale
+        ax.imshow(image, cmap='gray')
+        ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=10, marker='.', c='m')
+        # plot ground truth points as green pts
         if gt_pts is not None:
-            ground_truth_pts = gt_pts[i]
-            ground_truth_pts = ground_truth_pts * 50.0 + 100
+            ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=10, marker='.', c='g')
 
-        # call show_all_keypoints
-        show_all_keypoints(ax, np.squeeze(image), p_key_pts, ground_truth_pts)
+    def save_model(self):
+        model_dir = 'saved_models/'
+        model_name = 'keypoints_model_{}.pt'.format(time.time())
 
-        plt.axis('off')
+        # after training, save your model parameters in the dir 'saved_models'
+        torch.save(self.net.state_dict(), model_dir+model_name)
 
-    plt.show()
+    def validate(self):
+        self.net.eval()
+        images, predicted, gt = self.net_sample_output(self.net, self.test_loader)
+        predicted = predicted.view(predicted.size(0), 68, -1)
+        self.visualize_output(images, predicted, gt)
 
-def show_all_keypoints(ax, image, predicted_key_pts, gt_pts=None):
-    """Show image with predicted keypoints"""
-    # image is grayscale
-    ax.imshow(image, cmap='gray')
-    ax.scatter(predicted_key_pts[:, 0], predicted_key_pts[:, 1], s=5, marker='.', c='m')
-    # plot ground truth points as green pts
-    if gt_pts is not None:
-        ax.scatter(gt_pts[:, 0], gt_pts[:, 1], s=5, marker='.', c='g')
+    def plot_batch_loss(batch_loss):
+        for loss in batch_loss:
+            plt.plot(loss)
+        plt.show()
 
-def save_model(net):
-    model_dir = 'saved_models/'
-    model_name = 'keypoints_model_{}.pt'.format(time.time())
+    def train(self):
+        print('Statr training ...')
+        print('Number of epochs {}, batch size {}'.format(self.n_epochs, self.batch_size))
+        torch.cuda.empty_cache()
 
-    # after training, save your model parameters in the dir 'saved_models'
-    torch.save(net.state_dict(), model_dir+model_name)
+        self.reload_all_data()
 
-def validate(net, loader):
-    images, predicted, gt = net_sample_output(net, loader)
-    visualize_output(images, predicted, gt)
+        # train your network
+        total_batch_loss, epoch_loss = self.train_net()
+        self.plot_batch_loss(total_batch_loss)
+        # returns: test images, test predicted keypoints, test ground truth keypoints
+        (test_images, test_outputs, gt_pts) = self.net_sample_output(self.net, self.test_loader)
 
-def plot_batch_loss(batch_loss):
-    for loss in batch_loss:
-        plt.plot(loss)
-    plt.show()
+        # print out the dimensions of the data to see if they make sense
+        print('test data input size     :', test_images.data.size())
+        print('test data output size    :', test_outputs.data.size())
+        print('key points size          :', gt_pts.size())
 
-def main(batch_size=10, n_epochs=1):
-    torch.cuda.empty_cache()
-
-    net = gpu(Net())
-    print('Defined net:', net)
-
-    data_transform = transforms.Compose([
-        Rescale(250),
-        RandomCrop(224),
-        Normalize(),
-        ToTensor(),
-    ])
-
-    (train_dataset, train_loader) = load_data(batch_size=batch_size, data_transform=data_transform, dataType='training')
-    (test_dataset, test_loader) = load_data(batch_size=batch_size, data_transform=data_transform, dataType='test')
-
-    learning_rate = 1e-4
-    criterion = gpu(nn.MSELoss())
-
-    # optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    optimizer = optim.Adam(params=net.parameters(), lr=learning_rate)
-
-    # train your network
-    total_batch_loss, epoch_loss = train_net(net, n_epochs, train_loader, criterion, optimizer)
-    plot_batch_loss(total_batch_loss)
-
-    net = cpu(net)
-
-    # returns: test images, test predicted keypoints, test ground truth keypoints
-    (test_images, test_outputs, gt_pts) = net_sample_output(net, test_loader)
-
-    # print out the dimensions of the data to see if they make sense
-    print('test data input size     :', test_images.data.size())
-    print('test data output size    :', test_outputs.data.size())
-    print('key points size          :', gt_pts.size())
-
-    test_images = cpu(test_images)
-    predicted_key_pts = validate(net, test_images)
+        test_images = test_images.cpu()
+        predicted_key_pts = self.validate(self.net, test_images)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = 'CNN training')
     parser.add_argument('--batch_size', action='store', type=int, dest='batch_size', default=10, help='batch size')
     parser.add_argument('--n_epochs', action='store', type=int, dest='n_epochs', default=10, help='number of epochs')
+    parser.add_argument('--useGpu', action='store_true', dest='useGpu', help='try to use gpu (cuda)')
     args = parser.parse_args()
 
-    main(batch_size=args.batch_size, n_epochs=args.n_epochs)
+    trainer = Trainer(batch_size=args.batch_size, n_epochs=args.n_epochs, useGpu=args.useGpu)
+    trainer.train()
 
